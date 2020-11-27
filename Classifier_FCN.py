@@ -5,17 +5,17 @@ from tensorflow.keras.layers import LeakyReLU
 from tensorflow.keras.layers import Conv2D
 from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.optimizers import Adam
+from tensorflow import keras
 import numpy as np
 import random
 
 optimizer = Adam(0.0002, 0.5)
 
 
-class Discriminator():
-    def __init__(self, config):
-        self.config = config
-        self.input_shape = self.config["input_shape"]
-        self.batchsize = self.config["batch_size"]
+class FCN():
+    def __init__(self, input_shape, batch_size):
+        self.input_shape = input_shape
+        self.batch_size = batch_size
         self.discriminator = self.build_discriminator()
         self.discriminator.compile(loss=['binary_crossentropy'],
                                    optimizer=optimizer,
@@ -47,23 +47,23 @@ class Discriminator():
         data_size = len(x_train)
         batch_x_train = []
         batch_y_train = []
-        if data_size >= self.batchsize:
+        if data_size >= self.batch_size:
             randlist = random.sample(
-                range(0, data_size), self.batchsize)
+                range(0, data_size), self.batch_size)
             for i in randlist:
                 batch_x_train.append(x_train[i])
                 batch_y_train.append(y_train[i])
         else:
-            for i in range(self.batchsize):
+            for i in range(self.batch_size):
                 batch_x_train.append(x_train[i % data_size])
                 batch_y_train.append(y_train[i % data_size])
         batch_x_train = np.array(batch_x_train)
         batch_x_train = batch_x_train.reshape((
-             self.batchsize,
-             self.input_shape[0],
-             self.input_shape[1],
-             self.input_shape[2]
-             ))
+            self.batch_size,
+            self.input_shape[0],
+            self.input_shape[1],
+            self.input_shape[2]
+        ))
         batch_y_train = np.array(batch_y_train)
         return batch_x_train, batch_y_train
 
@@ -85,15 +85,11 @@ class Discriminator():
         else:
             return 1
 
+    def save_model(self, path):
+        self.discriminator.save(path+'\\best_model.hdf5')
+        print('模型已保存到下面目录')
+        print(path + '\\best_model.hdf5')
 
-if __name__ == '__main__':
-    import Utils
-    config = Utils.readjson("config.json")
-    x_train, y_train = Utils.read_dataset(
-        "img", (128, 128, 4))
-    discriminator = Discriminator(config)
-    # 训练
-    d_loss = discriminator.train(int(config["epoch"]), x_train, y_train)
-    # 预测结果
-    result = discriminator.discriminate(x_train[0])
-    print(result)
+    def load_model(self, path):
+        self.discriminator = keras.models.load_model(path)
+        self.discriminator.summary()
