@@ -3,8 +3,12 @@ import Utils
 
 def select_classifier(name, input_shape, batch_size):
     if name == "FCN":
-        import Classifier_FCN as FCN
-        classifier = FCN.FCN(input_shape, batch_size)
+        from Classifiers import Classifier_FCN
+        classifier = Classifier_FCN.FCN(input_shape, batch_size)
+        return classifier
+    elif name == "CIS":
+        from Classifiers import Classifier_CIS
+        classifier = Classifier_CIS.CIS(input_shape, batch_size)
         return classifier
     else:
         print("WRONG CLASSIFIER")

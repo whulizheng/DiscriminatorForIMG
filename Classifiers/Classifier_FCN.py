@@ -86,9 +86,9 @@ class FCN():
             return 1
 
     def save_model(self, path):
-        self.discriminator.save(path+'\\best_model.hdf5')
+        self.discriminator.save(path+'\\best_model_FCN.hdf5')
         print('模型已保存到下面目录')
-        print(path + '\\best_model.hdf5')
+        print(path + '\\best_model_FCN.hdf5')
 
     def load_model(self, path):
         self.discriminator = keras.models.load_model(path)
