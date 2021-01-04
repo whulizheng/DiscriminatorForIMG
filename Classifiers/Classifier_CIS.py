@@ -8,60 +8,50 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow import keras
 import cv2
 import numpy as np
-from scipy import ndimage
 import random
+import math
 
 optimizer = Adam(0.0002, 0.5)
 
 
-def HPF(img):
-    # 傅里叶变换
-    img = img.astype(np.float32)
-    res = img
-    dft0 = cv2.dft(img[:, :, 0], flags=cv2.DFT_COMPLEX_OUTPUT)
-    dft1 = cv2.dft(img[:, :, 1], flags=cv2.DFT_COMPLEX_OUTPUT)
-    dft2 = cv2.dft(img[:, :, 2], flags=cv2.DFT_COMPLEX_OUTPUT)
-    res3 = img[:, :, 3]
+def HPF(image, radius=50, n=1):
+    """
+    高通滤波函数
+    :param image: 输入图像
+    :param radius: 半径
+    :param n: ButterWorth滤波器阶数
+    :return: 滤波结果
+    """
+    # 对图像进行傅里叶变换，fft是一个三维数组，fft[:, :, 0]为实数部分，fft[:, :, 1]为虚数部分
+    fft = cv2.dft(np.float32(image), flags=cv2.DFT_COMPLEX_OUTPUT)
+    # 对fft进行中心化，生成的dshift仍然是一个三维数组
+    dshift = np.fft.fftshift(fft)
 
-    fshift0 = np.fft.fftshift(dft0)
-    fshift1 = np.fft.fftshift(dft1)
-    fshift2 = np.fft.fftshift(dft2)
+    # 得到中心像素
+    rows, cols = image.shape[:2]
+    mid_row, mid_col = int(rows / 2), int(cols / 2)
 
-    # 设置高通滤波器
-    rows = img.shape[0]
-    cols = img.shape[1]
+    # 构建ButterWorth高通滤波掩模
 
-    crow, ccol = int(rows/2), int(cols/2)  # 中心位置
-
-    mask = np.ones((rows, cols, 2), np.uint8)
-
-    mask[crow-30:crow+30, ccol-30:ccol+30] = 0
-
-    # 掩膜图像和频谱图像乘积
-
-    f0 = fshift0 * mask
-    f1 = fshift1 * mask
-    f2 = fshift2 * mask
-
+    mask = np.zeros((rows, cols, 2), np.float32)
+    for i in range(0, rows):
+        for j in range(0, cols):
+            # 计算(i, j)到中心点的距离
+            d = math.sqrt(pow(i - mid_row, 2) + pow(j - mid_col, 2))
+            try:
+                mask[i, j, 0] = mask[i, j, 1] = 1 / (1 + pow(radius / d, 2*n))
+            except ZeroDivisionError:
+                mask[i, j, 0] = mask[i, j, 1] = 0
+    # 给傅里叶变换结果乘掩模
+    fft_filtering = dshift * mask
     # 傅里叶逆变换
-
-    ishift0 = np.fft.ifftshift(f0)
-    ishift1 = np.fft.ifftshift(f1)
-    ishift2 = np.fft.ifftshift(f2)
-
-    iimg0 = cv2.idft(ishift0)
-    iimg1 = cv2.idft(ishift1)
-    iimg2 = cv2.idft(ishift2)
-
-    res0 = cv2.magnitude(iimg0[:, :, 0], iimg0[:, :, 1])
-    res1 = cv2.magnitude(iimg1[:, :, 0], iimg1[:, :, 1])
-    res2 = cv2.magnitude(iimg2[:, :, 0], iimg2[:, :, 1])
-
-    res[:, :, 0] = res0
-    res[:, :, 1] = res1
-    res[:, :, 2] = res2
-    res[:, :, 3] = res3
-    return res
+    ishift = np.fft.ifftshift(fft_filtering)
+    image_filtering = cv2.idft(ishift)
+    image_filtering = cv2.magnitude(
+        image_filtering[:, :, 0], image_filtering[:, :, 1])
+    # 对逆变换结果进行归一化（一般对图像处理的最后一步都要进行归一化，特殊情况除外）
+    cv2.normalize(image_filtering, image_filtering, 0, 1, cv2.NORM_MINMAX)
+    return image_filtering
 
 
 class CIS():
@@ -74,8 +64,10 @@ class CIS():
                                    metrics=['accuracy'])
 
     def preprocess(self, x_train):
+        from tqdm import tqdm
         new_x_train = []
-        for x in x_train:
+        print("预处理...")
+        for x in tqdm(x_train):
             new_x_train.append(HPF(x))
         return np.array(new_x_train)
 
@@ -100,7 +92,7 @@ class CIS():
         # TYpe 2 block
         model.add(Conv2D(128, kernel_size=3, strides=2, padding="same"))
         model.add(LeakyReLU(alpha=0.2))
-
+        model.add(AveragePooling2D())
         model.add(Flatten())
         model.add(Dense(1, activation='sigmoid'))
         # model.summary()
@@ -134,14 +126,10 @@ class CIS():
         return batch_x_train, batch_y_train
 
     def train(self, epochs, x_train, y_train):
-        d_loss = []
-        for epoch in range(epochs):
-            batch_x_train, batch_y_train = self.random_batch(x_train, y_train)
-            loss = self.discriminator.train_on_batch(
-                batch_x_train, batch_y_train)
-            print("epoch: %d [loss: %f]" % (epoch, loss[0]))
-            d_loss.append(loss[0])
-        return d_loss
+        x_train = np.array(self.preprocess(x_train))
+        y_train = np.array(y_train)
+        self.discriminator.fit(
+            x_train, y_train, epochs=epochs, batch_size=self.batch_size)
 
     def discriminate(self, img):
         img = img.reshape([1]+list(img.shape))

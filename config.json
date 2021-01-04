@@ -1,16 +1,16 @@
 {
     "data": {
-        "training_path": "img",
+        "training_path": "C:\\Users\\WhuLi\\Documents\\InformationHidingTasks\\training_with_lsb",
         "test_path": ""
     },
     "model": {
-        "classifier": "CIS",
+        "classifier": "LSB",
         "input_shape": [
-            128,
-            128,
-            4
+            512,
+            512,
+            1
         ],
-        "epochs": 2,
+        "epochs": 6,
         "batch_size": 16,
         "model_path": "model"
     }
